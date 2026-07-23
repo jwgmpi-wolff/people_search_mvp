@@ -4,14 +4,26 @@ People Search MVP is a Python Flask web application that discovers and ranks pub
 
 ## Features
 
-- Multi-source public web search aggregation (DuckDuckGo and Brave)
+- Multi-source public web search aggregation (DuckDuckGo, Brave, and Wikipedia)
 - Result scoring with simple adaptive term weighting
 - Webcam and stream scanner with URL pattern expansion
 - Background scan jobs (threaded fallback, optional Redis + RQ queue)
 - CSV export/import of scan results
 - Search history and saved webcam browsing endpoints
+- Source scope selector with an all-source-scopes default route
+- First-click reliable search submit handling in the web UI
+- Deterministic fallback search links for no-provider-result scenarios
 - Local deployment script for your computer
 - Azure deployment script and Azure ARM template for one-click infrastructure
+
+## Recent Changes (2026-07-23)
+
+- Improved first-click search reliability by handling both form submit and explicit run-button click with in-flight request guarding.
+- Added Wikipedia provider support and source-scope routing for all/all_source_scopes/web/news input values.
+- Added fallback result behavior when live providers return no items (fictional fixtures and generic fallback links).
+- Added `/health` endpoint and strengthened local run behavior with auto-port failover to avoid port conflicts.
+- Updated local startup scripts so `APP_AUTO_PORT=1` is enabled by default for smoother multi-project local development.
+- Refreshed screenshots in `docs/screenshots/` to match current UI and flows.
 
 ## Deploy To Azure Button
 
@@ -34,7 +46,13 @@ What it does:
 
 1. Creates `.venv` if it does not exist
 2. Installs dependencies from `requirements.txt`
-3. Starts Flask app on the provided port
+3. Starts Flask app on the provided port (or the next free port if that port is already in use)
+
+Port conflict behavior:
+
+- Local launchers enable `APP_AUTO_PORT=1` by default.
+- If port `5000` is busy, the app automatically moves to `5001`, `5002`, and so on.
+- This prevents clashes when running multiple local projects at the same time.
 
 App URLs:
 
@@ -99,13 +117,29 @@ What it does:
 
 ## People Search Screenshots
 
-Home and search interface:
+### 1. Home and Search Interface
 
-![People Search Home](docs/screenshots/people-search-home.png)
+Shows the current People Search landing state with search controls and recent history.
 
-Search execution state and results panel:
+![People Search Home - Default UI](docs/screenshots/people-search-home.png)
 
-![People Search Results](docs/screenshots/people-search-results.png)
+---
+
+### 2. Search Execution and Results State
+
+Shows the UI after running a search using fictional sample names, including status and results area behavior.
+
+![People Search Results - Post Search UI](docs/screenshots/people-search-results.png)
+
+---
+
+### 3. Webcam Live Page
+
+Shows the live webcam listing page with filter controls and detected sources.
+
+Screenshot refresh date: 2026-07-23
+
+![Webcam Live Page](docs/screenshots/webcam-live-page.png)
 
 ## Full Regenerate Prompt For GitHub Copilot
 
