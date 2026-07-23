@@ -17,5 +17,9 @@ Write-Host '[local] Installing dependencies...' -ForegroundColor Cyan
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 
 $env:PORT = "$Port"
-Write-Host "[local] Starting app on http://localhost:$Port" -ForegroundColor Green
+if (-not $env:APP_AUTO_PORT) {
+    $env:APP_AUTO_PORT = '1'
+}
+Write-Host "[local] Starting app (preferred port: http://localhost:$Port)." -ForegroundColor Green
+Write-Host "[local] If busy, the app will auto-select the next available port." -ForegroundColor Yellow
 .\.venv\Scripts\python.exe app.py
