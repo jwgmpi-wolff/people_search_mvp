@@ -97,6 +97,16 @@ What it does:
 - `POST /import_webcams?which=success|failure` CSV import
 - `GET /history` recent search history
 
+## People Search Screenshots
+
+Home and search interface:
+
+![People Search Home](docs/screenshots/people-search-home.png)
+
+Search execution state and results panel:
+
+![People Search Results](docs/screenshots/people-search-results.png)
+
 ## Full Regenerate Prompt For GitHub Copilot
 
 Use this prompt in GitHub Copilot Chat to recreate this entire project from scratch:
