@@ -15,13 +15,11 @@ People Search MVP is a Python Flask web application that discovers and ranks pub
 
 ## Deploy To Azure Button
 
-Replace `<github-user>` and `<repo-name>` after you publish this repository, then keep the same button in this README:
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fjerrywolff_microsoft%2Fpeople_search_mvp%2Fmain%2Finfra%2Fazuredeploy.json)
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2F<github-user>%2F<repo-name>%2Fmain%2Finfra%2Fazuredeploy.json)
+Direct URL:
 
-Direct URL template:
-
-`https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2F<github-user>%2F<repo-name>%2Fmain%2Finfra%2Fazuredeploy.json`
+`https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fjerrywolff_microsoft%2Fpeople_search_mvp%2Fmain%2Finfra%2Fazuredeploy.json`
 
 ## Local Deployment Functionality
 
