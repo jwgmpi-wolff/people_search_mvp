@@ -105,6 +105,36 @@ class SearchRefinementTests(unittest.TestCase):
         self.assertEqual(source.status_code, 302)
         self.assertEqual(source.headers["Location"], "https://example.test/zoe")
 
+    def test_search_accepts_first_and_last_name_filters_without_query(self):
+        with MODULE.app.test_client() as client, patch.object(
+            MODULE, "fetch_results", return_value=([], [])
+        ) as fetch_results:
+            response = client.post(
+                "/search",
+                data={
+                    "query": "",
+                    "first_name": "Avery",
+                    "last_name": "Stonebridge",
+                    "entity": "public",
+                    "country": "United States",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["query"], "Avery Stonebridge")
+        self.assertTrue(fetch_results.call_args.args[1].startswith('"Avery Stonebridge"'))
+        self.assertIn("United States", fetch_results.call_args.args[1])
+
+    def test_search_requires_query_or_name_filter(self):
+        with MODULE.app.test_client() as client:
+            response = client.post(
+                "/search",
+                data={"query": "", "first_name": "", "last_name": ""},
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("first name", response.get_json()["error"])
+
     def test_extracts_structured_data_from_record_page(self):
         html = """
         <html><head>
@@ -207,6 +237,8 @@ class SearchRefinementTests(unittest.TestCase):
             html = client.get("/").get_data(as_text=True)
 
         for field_name in (
+            "first_name",
+            "last_name",
             "public_record_type",
             "social_media_site",
             "country",

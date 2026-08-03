@@ -354,10 +354,20 @@ ENTITY_QUERY_TERMS = {
 
 def build_search_query(query: str, filters: dict) -> str:
     base_query = query.strip()
+    person_name = " ".join(
+        value for value in (
+            filters.get("first_name", "").strip(),
+            filters.get("last_name", "").strip(),
+        ) if value
+    )
     entity = filters.get("entity", "")
-    if entity == "public" and not (base_query.startswith('"') and base_query.endswith('"')):
+    if entity == "public" and base_query and not person_name and not (
+        base_query.startswith('"') and base_query.endswith('"')
+    ):
         base_query = f'"{base_query}"'
-    parts = [base_query]
+    parts = [f'"{person_name}"'] if person_name else []
+    if base_query:
+        parts.append(base_query)
     if entity in ENTITY_QUERY_TERMS and entity != "public":
         parts.append(f"({ENTITY_QUERY_TERMS[entity]})")
 
@@ -1263,6 +1273,8 @@ def search():
         "entity": str(_field("entity", _field("entity_type", "public")) or "public"),
         "source": str(_field("source", "all") or "all").lower(),
         "max_results": max(1, min(max_results, 100)),
+        "first_name": str(_field("first_name", "") or "").strip(),
+        "last_name": str(_field("last_name", "") or "").strip(),
         "country": str(_field("country", "") or "").strip(),
         "state": str(_field("state", "") or "").strip(),
         "county": str(_field("county", "") or "").strip(),
@@ -1272,8 +1284,13 @@ def search():
         "sort_by": str(_field("sort_by", "relevance") or "relevance").strip().lower(),
     }
 
-    if not query:
-        return jsonify({"error": "Provide at least one search term."}), 400
+    person_name = " ".join(
+        value for value in (filters["first_name"], filters["last_name"]) if value
+    )
+    if not query and not person_name:
+        return jsonify({"error": "Provide a query, first name, or last name."}), 400
+
+    search_label = query or person_name
 
     effective_query = build_search_query(query, filters)
     query_terms = [
@@ -1287,9 +1304,9 @@ def search():
     )
 
     if not candidate_results:
-        fallback_results = get_fictional_fallback_results(query, filters["max_results"])
+        fallback_results = get_fictional_fallback_results(search_label, filters["max_results"])
         if fallback_results:
-            logger.info("[search] Using local fictional fallback for query=%r", query)
+            logger.info("[search] Using local fictional fallback for query=%r", search_label)
             candidate_results = fallback_results
 
     scored = []
@@ -1304,7 +1321,7 @@ def search():
     if result_count == 0:
         logger.warning(
             "[search] No results query=%r source=%s errors=%s",
-            query,
+            search_label,
             filters["source"],
             fetch_errors,
         )
@@ -1313,7 +1330,7 @@ def search():
     cur = conn.cursor()
     cur.execute(
         "INSERT INTO searches(query, filters, result_count) VALUES(?, ?, ?)",
-        (query, json.dumps(filters), result_count),
+        (search_label, json.dumps(filters), result_count),
     )
     search_id = cur.lastrowid
 
@@ -1347,7 +1364,7 @@ def search():
         for item in scored_sorted
     ]
     response = {
-        "query": query,
+        "query": search_label,
         "effective_query": effective_query,
         "filters": filters,
         "results": response_results,

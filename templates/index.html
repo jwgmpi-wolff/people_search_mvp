@@ -32,9 +32,15 @@
       <h2>Search</h2>
       <form id="search-form" class="stack">
         <label>Query
-          <input name="query" type="text" placeholder="e.g. Avery Stonebridge" required />
+          <input name="query" type="text" placeholder="Additional terms, employer, username, or topic" />
         </label>
         <div class="refinement-grid">
+          <label>First name
+            <input name="first_name" type="text" autocomplete="given-name" placeholder="e.g. Avery" />
+          </label>
+          <label>Last name
+            <input name="last_name" type="text" autocomplete="family-name" placeholder="e.g. Stonebridge" />
+          </label>
           <label>Entity type
             <select name="entity">
               <option value="public">Public profile</option>
