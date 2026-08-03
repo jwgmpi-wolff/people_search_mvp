@@ -65,6 +65,9 @@ select option, select optgroup { background-color: #101820; color: #f4f9fc; }
 select option:checked { background-color: #2e76b3; color: #ffffff; }
 button { cursor:pointer; }
 .status { margin-top:.75rem; color:var(--muted); font-size:.95rem; }
+.results-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:18px; }
+.results-heading h2 { margin:0; }
+.results-heading button { width:auto; }
 .pill-box { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.6rem; }
 .pill { background: linear-gradient(90deg, rgba(46,118,179,0.06) 0%, rgba(46,118,179,0.02) 100%); border-radius:999px; padding:.28rem .5rem; font-size:.85rem; color:var(--text); border:1px solid rgba(46,118,179,0.06); }
 .result-list { display:grid; gap:.8rem; }

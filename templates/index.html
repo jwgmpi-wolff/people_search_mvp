@@ -137,7 +137,10 @@
       <div id="status" class="status">Ready.</div>
       <div id="learning" class="pill-box"></div>
 
-      <h2 style="margin-top:18px">Search Results</h2>
+      <div class="results-heading">
+        <h2>Search Results</h2>
+        <button id="clear-results" type="button">Clear results</button>
+      </div>
       <div id="result-list" class="result-list"></div>
       </section>
     </div>
@@ -198,7 +201,42 @@
     const status = document.getElementById('status');
     const learning = document.getElementById('learning');
     const historyList = document.getElementById('history-list');
+    const clearResultsBtn = document.getElementById('clear-results');
+    const searchResultsStorageKey = 'people_search_results';
     let searchInFlight = false;
+
+    function saveSearchResults(data) {
+      try {
+        sessionStorage.setItem(searchResultsStorageKey, JSON.stringify(data));
+      } catch (err) {
+        console.warn('Unable to preserve search results for this session.', err);
+      }
+    }
+
+    function restoreSearchResults() {
+      try {
+        const saved = sessionStorage.getItem(searchResultsStorageKey);
+        if (!saved) return;
+        const data = JSON.parse(saved);
+        renderResults(data);
+        renderLearning(data.learning_terms || {});
+        status.textContent = `Search complete for “${data.query}” (${data.results.length} results).`;
+      } catch (err) {
+        sessionStorage.removeItem(searchResultsStorageKey);
+        console.warn('Unable to restore saved search results.', err);
+      }
+    }
+
+    function clearSearchResults() {
+      resultList.innerHTML = '';
+      learning.innerHTML = '';
+      status.textContent = 'Ready.';
+      try {
+        sessionStorage.removeItem(searchResultsStorageKey);
+      } catch (err) {
+        console.warn('Unable to clear saved search results.', err);
+      }
+    }
 
     function renderResults(data) {
       resultList.innerHTML = '';
@@ -294,7 +332,6 @@
       const submitBtn = activeForm.querySelector('button[type="submit"]');
       if (submitBtn) submitBtn.disabled = true;
       status.textContent = 'Searching…';
-      resultList.innerHTML = '';
 
       try {
         // if hero-search used, copy its query into the main search form input so results and history behave consistently
@@ -319,6 +356,7 @@
         }
         renderResults(data);
         renderLearning(data.learning_terms || {});
+        saveSearchResults(data);
         status.textContent = `Search complete for “${data.query}” (${data.results.length} results).`;
         loadHistory();
       } catch (err) {
@@ -337,7 +375,9 @@
         performSearch();
       });
     }
+    clearResultsBtn.addEventListener('click', clearSearchResults);
 
+    restoreSearchResults();
     loadHistory();
 
     // Scanner UI bindings

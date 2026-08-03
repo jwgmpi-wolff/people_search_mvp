@@ -220,7 +220,43 @@ class SearchRefinementTests(unittest.TestCase):
         self.assertIn("record.fields", html)
         self.assertIn("item.record_path", html)
         self.assertIn("View full record", html)
+        self.assertIn('id="clear-results"', html)
+        self.assertIn("sessionStorage.setItem(searchResultsStorageKey", html)
+        self.assertIn("restoreSearchResults();", html)
+        self.assertNotIn("status.textContent = 'Searching…';\n      resultList.innerHTML = '';", html)
         self.assertIn('name="max_results" type="number" min="5" max="100" value="25"', html)
+
+    def test_record_detail_returns_to_preserved_results(self):
+        with MODULE.app.test_client() as client:
+            MODULE.init_db()
+            conn = MODULE.get_conn()
+            search_cursor = conn.execute(
+                "INSERT INTO searches(query, filters, result_count) VALUES(?, ?, ?)",
+                ("Jane Doe", "{}", 1),
+            )
+            cursor = conn.execute(
+                """
+                INSERT INTO search_results(search_id, title, url, snippet, source, score, record_json)
+                VALUES(?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    search_cursor.lastrowid,
+                    "Jane Doe",
+                    "https://example.test/jane",
+                    "Public record",
+                    "test",
+                    1,
+                    '{"name":"Jane Doe","fields":[]}',
+                ),
+            )
+            result_id = cursor.lastrowid
+            conn.commit()
+            conn.close()
+
+            html = client.get(f"/records/{result_id}").get_data(as_text=True)
+
+        self.assertIn('href="/#results"', html)
+        self.assertIn("history.back()", html)
 
 
 if __name__ == "__main__":
