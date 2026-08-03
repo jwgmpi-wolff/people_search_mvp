@@ -71,6 +71,11 @@ button { cursor:pointer; }
 .card { border-radius: 12px; padding: .75rem; background: var(--panel-strong); border:1px solid rgba(0,0,0,0.25); box-shadow: 0 6px 18px rgba(0,0,0,0.6); }
 .card h3 { margin-top:0; font-size:1rem; }
 .muted { color:var(--muted); font-size:.9rem; }
+.record-summary { line-height:1.5; }
+.record-fields { display:grid; grid-template-columns:minmax(110px, .35fr) 1fr; gap:1px; margin:12px 0 0; border:1px solid rgba(46,118,179,.45); background:rgba(46,118,179,.35); }
+.record-fields dt, .record-fields dd { margin:0; padding:8px 10px; background:#111b23; overflow-wrap:anywhere; }
+.record-fields dt { color:#9fd7ff; font-weight:600; }
+.record-fields dd { color:#f4f9fc; }
 .history-list { margin:0; padding-left:1rem; color:var(--text); display:grid; gap:.5rem; }
 
 /* Accent utilities */
@@ -80,3 +85,4 @@ button { cursor:pointer; }
 .muted-2 { color: #6f7f88; }
 @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } .hero .overlay { width: 92%; } }
 @media (max-width: 620px) { #search .refinement-grid { grid-template-columns:1fr; } }
+@media (max-width: 620px) { .record-fields { grid-template-columns:1fr; } .record-fields dd { padding-top:4px; } }

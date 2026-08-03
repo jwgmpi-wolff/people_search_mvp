@@ -21,9 +21,24 @@ class SearchRefinementTests(unittest.TestCase):
             }
         ]
 
+        enriched = [
+            {
+                **candidates[0],
+                "score": 1,
+                "record": {
+                    "name": "Zoe Adams",
+                    "summary": "Extracted public record.",
+                    "fields": [{"label": "Record ID", "value": "ABC-123"}],
+                    "source_name": "example.test",
+                    "extraction": "page",
+                },
+            }
+        ]
         with MODULE.app.test_client() as client, patch.object(
             MODULE, "fetch_results", return_value=(candidates, [])
-        ) as fetch_results:
+        ) as fetch_results, patch.object(
+            MODULE, "enrich_search_results", return_value=enriched
+        ):
             response = client.post(
                 "/search",
                 data={
@@ -37,6 +52,7 @@ class SearchRefinementTests(unittest.TestCase):
                     "public_record_type": "assessor",
                     "social_media_site": "linkedin",
                     "sort_by": "last_name",
+                    "max_results": "75",
                 },
             )
 
@@ -53,6 +69,37 @@ class SearchRefinementTests(unittest.TestCase):
             "site:linkedin.com",
         ):
             self.assertIn(expected, launched_query)
+        self.assertEqual(
+            response.get_json()["results"][0]["record"]["fields"][0]["value"],
+            "ABC-123",
+        )
+        self.assertNotIn("url", response.get_json()["results"][0])
+        self.assertEqual(fetch_results.call_args.args[2], 75)
+
+    def test_extracts_structured_data_from_record_page(self):
+        html = """
+        <html><head>
+          <script type="application/ld+json">
+            {"@type":"Person","name":"Jane Doe","jobTitle":"Engineer","description":"Public profile details."}
+          </script>
+        </head><body>
+          <table><tr><th>Record ID</th><td>ABC-123</td></tr></table>
+        </body></html>
+        """
+
+        record = MODULE.extract_record_from_html(
+            html,
+            {
+                "title": "Jane Doe - Profile",
+                "url": "https://records.example.gov/jane",
+                "snippet": "Excerpt",
+            },
+        )
+
+        self.assertEqual(record["name"], "Jane Doe")
+        self.assertEqual(record["summary"], "Public profile details.")
+        self.assertIn({"label": "Occupation", "value": "Engineer"}, record["fields"])
+        self.assertIn({"label": "Record ID", "value": "ABC-123"}, record["fields"])
 
     def test_results_can_sort_by_first_or_last_name(self):
         results = [
@@ -86,6 +133,9 @@ class SearchRefinementTests(unittest.TestCase):
             "sort_by",
         ):
             self.assertIn(f'name="{field_name}"', html)
+        self.assertNotIn("Open source", html)
+        self.assertIn("record.fields", html)
+        self.assertIn('name="max_results" type="number" min="5" max="100" value="25"', html)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ import os
 import re
 import socket
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import requests
@@ -377,6 +378,125 @@ def sort_search_results(results: list, sort_by: str) -> list:
     if sort_by in {"first_name", "last_name"}:
         return sorted(results, key=lambda item: result_name_key(item, sort_by))
     return sorted(results, key=lambda item: item["score"], reverse=True)
+
+
+def _record_value(value) -> str:
+    if isinstance(value, dict):
+        ordered_keys = ("streetAddress", "addressLocality", "addressRegion", "postalCode", "addressCountry")
+        return ", ".join(str(value[key]).strip() for key in ordered_keys if value.get(key))
+    if isinstance(value, list):
+        return ", ".join(_record_value(item) for item in value if _record_value(item))
+    return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def extract_record_from_html(html: str, item: dict) -> dict:
+    soup = BeautifulSoup(html or "", "html.parser")
+    fields = []
+    seen_labels = set()
+
+    def add_field(label, value):
+        clean_label = re.sub(r"\s+", " ", str(label or "")).strip().rstrip(":")
+        clean_value = _record_value(value)
+        normalized_label = clean_label.casefold()
+        if clean_label and clean_value and normalized_label not in seen_labels:
+            fields.append({"label": clean_label[:80], "value": clean_value[:500]})
+            seen_labels.add(normalized_label)
+
+    structured_record = None
+    for script in soup.select('script[type="application/ld+json"]'):
+        try:
+            payload = json.loads(script.string or script.get_text() or "")
+        except (TypeError, ValueError):
+            continue
+        candidates = payload if isinstance(payload, list) else [payload]
+        for candidate in candidates:
+            if isinstance(candidate, dict) and isinstance(candidate.get("@graph"), list):
+                candidates.extend(candidate["@graph"])
+            if not isinstance(candidate, dict):
+                continue
+            record_type = candidate.get("@type")
+            record_types = record_type if isinstance(record_type, list) else [record_type]
+            if any(value in {"Person", "Organization", "NewsArticle", "Article", "GovernmentOrganization"} for value in record_types):
+                structured_record = candidate
+                break
+        if structured_record:
+            break
+
+    if structured_record:
+        for key, label in (
+            ("jobTitle", "Occupation"),
+            ("worksFor", "Organization"),
+            ("address", "Address"),
+            ("telephone", "Phone"),
+            ("email", "Email"),
+            ("birthDate", "Birth date"),
+            ("datePublished", "Published"),
+        ):
+            add_field(label, structured_record.get(key))
+
+    for row in soup.select("table tr"):
+        cells = row.find_all(["th", "td"], recursive=False)
+        if len(cells) >= 2:
+            add_field(cells[0].get_text(" ", strip=True), cells[1].get_text(" ", strip=True))
+        if len(fields) >= 16:
+            break
+
+    if len(fields) < 16:
+        for term in soup.select("dl dt"):
+            description = term.find_next_sibling("dd")
+            if description:
+                add_field(term.get_text(" ", strip=True), description.get_text(" ", strip=True))
+            if len(fields) >= 16:
+                break
+
+    description = ""
+    if structured_record:
+        description = _record_value(structured_record.get("description"))
+    if not description:
+        meta = soup.select_one('meta[name="description"], meta[property="og:description"]')
+        description = _record_value(meta.get("content")) if meta else ""
+    if not description:
+        paragraphs = [node.get_text(" ", strip=True) for node in soup.select("main p, article p, body p")]
+        description = " ".join(value for value in paragraphs if len(value) >= 30)[:1000]
+
+    name = _record_value(structured_record.get("name")) if structured_record else ""
+    if not name:
+        name = re.split(r"\s[-|:]\s", item.get("title") or "", maxsplit=1)[0].strip()
+
+    return {
+        "name": name or item.get("title") or "Public record",
+        "summary": description or item.get("snippet") or "No record summary was published.",
+        "fields": fields,
+        "source_name": urlparse(item.get("url") or "").netloc,
+        "extraction": "page" if description or fields else "search_excerpt",
+    }
+
+
+def enrich_result_with_record(item: dict) -> dict:
+    if item.get("source") == "local-fixture":
+        return {**item, "record": extract_record_from_html("", item)}
+
+    response, error = safe_request(
+        item.get("url") or "",
+        params={},
+        timeout=10,
+        source_name="record-extractor",
+    )
+    if error or response is None:
+        record = extract_record_from_html("", item)
+        record["extraction"] = "search_excerpt"
+        return {**item, "record": record, "record_error": error}
+
+    content_type = response.headers.get("Content-Type", "").lower()
+    html = response.text if "html" in content_type or not content_type else ""
+    return {**item, "record": extract_record_from_html(html, item)}
+
+
+def enrich_search_results(results: list) -> list:
+    if not results:
+        return []
+    with ThreadPoolExecutor(max_workers=min(6, len(results))) as executor:
+        return list(executor.map(enrich_result_with_record, results))
 
 
 def resolve_provider_names(source: str):
@@ -1083,14 +1203,14 @@ def search():
 
     query = str(_field("query", "")).strip()
     try:
-        max_results = int(_field("max_results", 8) or 8)
+        max_results = int(_field("max_results", 25) or 25)
     except ValueError:
-        max_results = 8
+        max_results = 25
 
     filters = {
         "entity": str(_field("entity", _field("entity_type", "public")) or "public"),
         "source": str(_field("source", "all") or "all").lower(),
-        "max_results": max(1, min(max_results, 25)),
+        "max_results": max(1, min(max_results, 100)),
         "country": str(_field("country", "") or "").strip(),
         "state": str(_field("state", "") or "").strip(),
         "county": str(_field("county", "") or "").strip(),
@@ -1120,16 +1240,13 @@ def search():
             logger.info("[search] Using local fictional fallback for query=%r", query)
             candidate_results = fallback_results
 
-    if not candidate_results:
-        logger.info("[search] Using generic fallback links for query=%r", query)
-        candidate_results = get_generic_fallback_results(effective_query, filters["max_results"])
-
     scored = []
     for item in candidate_results:
         score = score_result(item, query_terms, learning_weights)
         scored.append({**item, "score": score})
 
-    scored_sorted = sort_search_results(scored, filters["sort_by"])
+    scored_sorted = sort_search_results(scored, filters["sort_by"])[:filters["max_results"]]
+    scored_sorted = enrich_search_results(scored_sorted)
     result_count = len(scored_sorted)
 
     if result_count == 0:
@@ -1169,11 +1286,15 @@ def search():
 
     update_learning_weights(query_terms, [item["score"] for item in scored_sorted])
 
+    response_results = [
+        {key: value for key, value in item.items() if key != "url"}
+        for item in scored_sorted
+    ]
     response = {
         "query": query,
         "effective_query": effective_query,
         "filters": filters,
-        "results": scored_sorted,
+        "results": response_results,
         "search_id": search_id,
         "learning_terms": load_learning_weights(),
         "fetch_errors": fetch_errors,

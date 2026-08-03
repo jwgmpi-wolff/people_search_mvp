@@ -129,7 +129,7 @@
             </select>
           </label>
           <label>Max results
-            <input name="max_results" type="number" min="5" max="25" value="8" />
+            <input name="max_results" type="number" min="5" max="100" value="25" />
           </label>
         </div>
         <button type="submit">Run search</button>
@@ -208,14 +208,41 @@
       }
 
       data.results.forEach(item => {
+        const record = item.record || {
+          name: item.title,
+          summary: item.snippet || 'No record summary was published.',
+          fields: [],
+          source_name: item.source
+        };
         const card = document.createElement('article');
         card.className = 'card';
-        card.innerHTML = `
-          <h3>${item.title}</h3>
-          <p class="muted">Score: ${item.score} · Source: ${item.source}</p>
-          <p>${item.snippet || 'Public web result preview.'}</p>
-          <a href="${item.url}" target="_blank" rel="noreferrer">Open source</a>
-        `;
+
+        const heading = document.createElement('h3');
+        heading.textContent = record.name || 'Public record';
+        card.appendChild(heading);
+
+        const provenance = document.createElement('p');
+        provenance.className = 'muted';
+        provenance.textContent = `Record source: ${record.source_name || item.source} · ${record.extraction === 'page' ? 'Page data' : 'Search excerpt'}`;
+        card.appendChild(provenance);
+
+        const summary = document.createElement('p');
+        summary.className = 'record-summary';
+        summary.textContent = record.summary || 'No record summary was published.';
+        card.appendChild(summary);
+
+        if (Array.isArray(record.fields) && record.fields.length) {
+          const fields = document.createElement('dl');
+          fields.className = 'record-fields';
+          record.fields.forEach(field => {
+            const term = document.createElement('dt');
+            term.textContent = field.label;
+            const value = document.createElement('dd');
+            value.textContent = field.value;
+            fields.append(term, value);
+          });
+          card.appendChild(fields);
+        }
         resultList.appendChild(card);
       });
     }
