@@ -4,7 +4,7 @@ People Search MVP is a Python Flask web application that discovers and ranks pub
 
 ## Features
 
-- Multi-source public web search aggregation (DuckDuckGo, Brave, and Wikipedia)
+- Multi-source public web search aggregation (DuckDuckGo Lite, Brave, and Wikipedia)
 - Result scoring with simple adaptive term weighting
 - Webcam and stream scanner with URL pattern expansion
 - Background scan jobs (threaded fallback, optional Redis + RQ queue)
@@ -15,6 +15,7 @@ People Search MVP is a Python Flask web application that discovers and ranks pub
 - Result ordering by relevance, first name, or last name
 - Configurable searches returning up to 100 results
 - Record-centric results that extract page summaries and structured fields instead of presenting site links
+- Exact-name public-person queries that preserve location refinements without requiring brittle profile phrases
 - First-click reliable search submit handling in the web UI
 - Deterministic fallback records for no-provider-result scenarios
 - Local deployment script for your computer

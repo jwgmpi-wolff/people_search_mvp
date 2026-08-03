@@ -11,6 +11,23 @@ SPEC.loader.exec_module(MODULE)
 
 
 class SearchRefinementTests(unittest.TestCase):
+    def test_duckduckgo_uses_lite_post_and_parses_records(self):
+        html = """
+        <table>
+          <tr><td>1.</td><td><a class="result-link" href="https://records.example.gov/raul">Raul Alexis record</a></td></tr>
+          <tr><td></td><td class="result-snippet">Raul&amp;#39;s Florida public record.</td></tr>
+        </table>
+        """
+        response = type("Response", (), {"text": html})()
+
+        with patch.object(MODULE, "safe_request", return_value=(response, None)) as request:
+            result = MODULE.fetch_duckduckgo('"Raul Alexis" Florida', 25)
+
+        self.assertEqual(len(result["results"]), 1)
+        self.assertEqual(result["results"][0]["snippet"], "Raul's Florida public record.")
+        self.assertEqual(request.call_args.kwargs["method"], "post")
+        self.assertIn("lite.duckduckgo.com", request.call_args.args[0])
+
     def test_search_applies_all_refinements_to_provider_query(self):
         candidates = [
             {
@@ -59,7 +76,7 @@ class SearchRefinementTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         launched_query = fetch_results.call_args.args[1]
         for expected in (
-            "public profile",
+            '"software engineer"',
             "Seattle",
             "King County",
             "Washington",
@@ -69,6 +86,7 @@ class SearchRefinementTests(unittest.TestCase):
             "site:linkedin.com",
         ):
             self.assertIn(expected, launched_query)
+        self.assertNotIn('"Seattle, King County, Washington, United States"', launched_query)
         self.assertEqual(
             response.get_json()["results"][0]["record"]["fields"][0]["value"],
             "ABC-123",
@@ -100,6 +118,13 @@ class SearchRefinementTests(unittest.TestCase):
         self.assertEqual(record["summary"], "Public profile details.")
         self.assertIn({"label": "Occupation", "value": "Engineer"}, record["fields"])
         self.assertIn({"label": "Record ID", "value": "ABC-123"}, record["fields"])
+        self.assertEqual(MODULE._record_value("Raul&#39;s record"), "Raul's record")
+
+        excerpt = MODULE.extract_record_from_html(
+            "",
+            {"title": "Raul Alexis", "snippet": "Raul&#39;s public record", "url": ""},
+        )
+        self.assertEqual(excerpt["summary"], "Raul's public record")
 
     def test_results_can_sort_by_first_or_last_name(self):
         results = [

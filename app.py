@@ -15,6 +15,7 @@ import csv
 import io
 import datetime
 import time
+from html import unescape
 from urllib.parse import quote_plus
 
 # optional background worker (RQ)
@@ -149,10 +150,24 @@ def get_conn():
     conn.row_factory = sqlite3.Row
     return conn
 
-def safe_request(url: str, *, params: dict, timeout: int = 20, source_name: str = "web"):
+def safe_request(
+    url: str,
+    *,
+    params: dict,
+    timeout: int = 20,
+    source_name: str = "web",
+    method: str = "get",
+):
     try:
         logger.info("[%s] Request start url=%s params=%s", source_name, url, params)
-        resp = requests.get(url, headers=DEFAULT_HEADERS, params=params, timeout=timeout)
+        request_kwargs = {"params": params} if method == "get" else {"data": params}
+        resp = requests.request(
+            method,
+            url,
+            headers=DEFAULT_HEADERS,
+            timeout=timeout,
+            **request_kwargs,
+        )
         logger.info("[%s] Response status=%s final_url=%s", source_name, resp.status_code, resp.url)
         resp.raise_for_status()
         return resp, None
@@ -162,10 +177,11 @@ def safe_request(url: str, *, params: dict, timeout: int = 20, source_name: str 
 
 def fetch_duckduckgo(query: str, max_results: int = 8):
     resp, err = safe_request(
-        "https://duckduckgo.com/html/",
+        "https://lite.duckduckgo.com/lite/",
         params={"q": query, "kl": "us-en"},
         timeout=20,
         source_name="duckduckgo",
+        method="post",
     )
     if err:
         return {"results": [], "error": err, "source": "duckduckgo"}
@@ -174,20 +190,21 @@ def fetch_duckduckgo(query: str, max_results: int = 8):
     items = []
     seen = set()
 
-    for result in soup.select("div.result"):
-        a = result.select_one("a.result__a")
-        if not a:
-            continue
-
-        title = a.get_text(" ", strip=True)
+    for a in soup.select("a.result-link"):
+        title = unescape(a.get_text(" ", strip=True))
         href = a.get("href")
         if not href or not href.startswith(("http://", "https://")):
             continue
         if href in seen:
             continue
 
-        snippet_node = result.select_one("a.result__snippet, div.result__snippet")
-        snippet = snippet_node.get_text(" ", strip=True) if snippet_node else "DuckDuckGo result"
+        result_row = a.find_parent("tr")
+        snippet_row = result_row.find_next_sibling("tr") if result_row else None
+        snippet_node = snippet_row.select_one("td.result-snippet") if snippet_row else None
+        snippet = (
+            unescape(snippet_node.get_text(" ", strip=True))
+            if snippet_node else "DuckDuckGo result"
+        )
 
         items.append({
             "title": title,
@@ -331,21 +348,23 @@ ENTITY_QUERY_TERMS = {
 
 
 def build_search_query(query: str, filters: dict) -> str:
-    parts = [query.strip()]
+    base_query = query.strip()
     entity = filters.get("entity", "")
-    if entity in ENTITY_QUERY_TERMS:
+    if entity == "public" and not (base_query.startswith('"') and base_query.endswith('"')):
+        base_query = f'"{base_query}"'
+    parts = [base_query]
+    if entity in ENTITY_QUERY_TERMS and entity != "public":
         parts.append(f"({ENTITY_QUERY_TERMS[entity]})")
 
-    location = ", ".join(
+    locations = [
         value for value in (
             filters.get("city", ""),
             filters.get("county", ""),
             filters.get("state", ""),
             filters.get("country", ""),
         ) if value
-    )
-    if location:
-        parts.append(f'"{location}"')
+    ]
+    parts.extend(locations)
 
     public_record_type = filters.get("public_record_type", "")
     if public_record_type in PUBLIC_RECORD_TERMS:
@@ -386,7 +405,7 @@ def _record_value(value) -> str:
         return ", ".join(str(value[key]).strip() for key in ordered_keys if value.get(key))
     if isinstance(value, list):
         return ", ".join(_record_value(item) for item in value if _record_value(item))
-    return re.sub(r"\s+", " ", str(value or "")).strip()
+    return re.sub(r"\s+", " ", unescape(str(value or ""))).strip()
 
 
 def extract_record_from_html(html: str, item: dict) -> dict:
@@ -464,8 +483,8 @@ def extract_record_from_html(html: str, item: dict) -> dict:
         name = re.split(r"\s[-|:]\s", item.get("title") or "", maxsplit=1)[0].strip()
 
     return {
-        "name": name or item.get("title") or "Public record",
-        "summary": description or item.get("snippet") or "No record summary was published.",
+        "name": _record_value(name or item.get("title")) or "Public record",
+        "summary": _record_value(description or item.get("snippet")) or "No record summary was published.",
         "fields": fields,
         "source_name": urlparse(item.get("url") or "").netloc,
         "extraction": "page" if description or fields else "search_excerpt",
