@@ -45,15 +45,11 @@ nav a { color:var(--accent); text-decoration:none; margin-left: .8rem; }
 /* Ensure inputs/textarea inside constrained forms don't exceed container */
 .panel form input, .panel form textarea, .panel form select, .hero .hero-search input, .hero .hero-search button { box-sizing: border-box; width:100%; }
 
-/* Explicit two-column layout for People Search to match Webcam Live */
-#search .vertical-stack { display:flex; flex-direction:column; gap:8px; }
-#search .two-col { display:flex; gap:8px; align-items:flex-start; }
-#search .two-col .left { flex:1; display:flex; flex-direction:column; gap:8px; }
-#search .two-col .right { width:320px; display:flex; flex-direction:column; gap:8px; }
-#search .two-col .right button { width:100%; }
+#search .refinement-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; }
+#search form > button { width:100%; }
 
 /* Make the People Search panel half the viewport width on larger screens */
-#tab-people .panel#search { width:50vw; max-width:900px; }
+#tab-people .panel#search { width:72vw; max-width:1100px; }
 @media (max-width: 980px) { #tab-people .panel#search { width:100%; max-width:100%; } }
 
 /* Keep the interactive search surface above decorative/background layers. */
@@ -64,6 +60,9 @@ nav a { color:var(--accent); text-decoration:none; margin-left: .8rem; }
 @media (max-width: 980px) { #history.panel { width:100%; max-width:100%; margin-left:0; } }
 label { display:grid; gap:.25rem; font-size:.95rem; color:var(--text); }
 input, select, button { border-radius: 8px; border: 1px solid var(--input-border); padding: .65rem .75rem; background: var(--input-bg); color: var(--text); }
+select { color-scheme: dark; background-color: #17232d; color: #f4f9fc; }
+select option, select optgroup { background-color: #101820; color: #f4f9fc; }
+select option:checked { background-color: #2e76b3; color: #ffffff; }
 button { cursor:pointer; }
 .status { margin-top:.75rem; color:var(--muted); font-size:.95rem; }
 .pill-box { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.6rem; }
@@ -80,3 +79,4 @@ button { cursor:pointer; }
 .accent-yellow { color: #f4c542; }
 .muted-2 { color: #6f7f88; }
 @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } .hero .overlay { width: 92%; } }
+@media (max-width: 620px) { #search .refinement-grid { grid-template-columns:1fr; } }

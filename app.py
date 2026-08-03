@@ -14,6 +14,7 @@ import csv
 import io
 import datetime
 import time
+from urllib.parse import quote_plus
 
 # optional background worker (RQ)
 try:
@@ -302,12 +303,87 @@ PROVIDERS = {
     "wikipedia": fetch_wikipedia,
 }
 
+SOCIAL_MEDIA_DOMAINS = {
+    "linkedin": "linkedin.com",
+    "facebook": "facebook.com",
+    "x": "x.com",
+    "instagram": "instagram.com",
+    "tiktok": "tiktok.com",
+    "github": "github.com",
+    "youtube": "youtube.com",
+    "reddit": "reddit.com",
+}
+
+PUBLIC_RECORD_TERMS = {
+    "county_records": '"county public records"',
+    "assessor": '"county assessor" OR "property records"',
+    "clerk_court": '"county clerk" OR "court records"',
+    "recorder": '"county recorder" OR "deed records"',
+    "sheriff": '"county sheriff"',
+}
+
+ENTITY_QUERY_TERMS = {
+    "public": '"public profile"',
+    "org": '"organization"',
+    "news": '"news" OR "media"',
+}
+
+
+def build_search_query(query: str, filters: dict) -> str:
+    parts = [query.strip()]
+    entity = filters.get("entity", "")
+    if entity in ENTITY_QUERY_TERMS:
+        parts.append(f"({ENTITY_QUERY_TERMS[entity]})")
+
+    location = ", ".join(
+        value for value in (
+            filters.get("city", ""),
+            filters.get("county", ""),
+            filters.get("state", ""),
+            filters.get("country", ""),
+        ) if value
+    )
+    if location:
+        parts.append(f'"{location}"')
+
+    public_record_type = filters.get("public_record_type", "")
+    if public_record_type in PUBLIC_RECORD_TERMS:
+        parts.append(f"({PUBLIC_RECORD_TERMS[public_record_type]})")
+    if filters.get("source") == "public_records":
+        parts.append('(site:.gov OR site:.us) "public records"')
+
+    social_media_site = filters.get("social_media_site", "")
+    if social_media_site in SOCIAL_MEDIA_DOMAINS:
+        parts.append(f"site:{SOCIAL_MEDIA_DOMAINS[social_media_site]}")
+    elif filters.get("source") == "social_media":
+        domains = " OR ".join(f"site:{domain}" for domain in SOCIAL_MEDIA_DOMAINS.values())
+        parts.append(f"({domains})")
+
+    return " ".join(parts)
+
+
+def result_name_key(item: dict, sort_by: str):
+    title = re.split(r"\s[-|:]\s", item.get("title") or "", maxsplit=1)[0]
+    words = re.findall(r"[A-Za-z][A-Za-z'.-]*", title)
+    if not words:
+        return ("", "", (item.get("title") or "").casefold())
+    first_name = words[0].casefold()
+    last_name = words[-1].casefold() if len(words) > 1 else first_name
+    primary, secondary = (last_name, first_name) if sort_by == "last_name" else (first_name, last_name)
+    return (primary, secondary, (item.get("title") or "").casefold())
+
+
+def sort_search_results(results: list, sort_by: str) -> list:
+    if sort_by in {"first_name", "last_name"}:
+        return sorted(results, key=lambda item: result_name_key(item, sort_by))
+    return sorted(results, key=lambda item: item["score"], reverse=True)
+
 
 def resolve_provider_names(source: str):
     normalized = (source or "all").strip().lower()
 
     # UI-level source scopes currently map to the same public providers.
-    if normalized in {"all", "all_source_scopes", "web", "news"}:
+    if normalized in {"all", "all_source_scopes", "web", "news", "public_records", "social_media"}:
         return list(PROVIDERS.keys())
 
     # Direct provider targeting is still supported for advanced callers.
@@ -462,8 +538,8 @@ def get_generic_fallback_results(query: str, max_results: int):
     if not q:
         return []
 
-    q_plus = q.replace(" ", "+")
-    q_underscore = q.replace(" ", "_")
+    q_plus = quote_plus(q)
+    q_underscore = quote_plus(q).replace("+", "_")
     options = [
         {
             "title": f"Search '{q}' on Wikipedia",
@@ -1015,18 +1091,26 @@ def search():
         "entity": str(_field("entity", _field("entity_type", "public")) or "public"),
         "source": str(_field("source", "all") or "all").lower(),
         "max_results": max(1, min(max_results, 25)),
+        "country": str(_field("country", "") or "").strip(),
+        "state": str(_field("state", "") or "").strip(),
+        "county": str(_field("county", "") or "").strip(),
+        "city": str(_field("city", "") or "").strip(),
+        "public_record_type": str(_field("public_record_type", "") or "").strip().lower(),
+        "social_media_site": str(_field("social_media_site", "") or "").strip().lower(),
+        "sort_by": str(_field("sort_by", "relevance") or "relevance").strip().lower(),
     }
 
     if not query:
         return jsonify({"error": "Provide at least one search term."}), 400
 
+    effective_query = build_search_query(query, filters)
     query_terms = [
-        t for t in re.findall(r"[A-Za-z0-9]+", query.lower()) if len(t) > 2
+        t for t in re.findall(r"[A-Za-z0-9]+", effective_query.lower()) if len(t) > 2
     ]
     learning_weights = load_learning_weights()
     candidate_results, fetch_errors = fetch_results(
         filters["source"],
-        query,
+        effective_query,
         filters["max_results"],
     )
 
@@ -1038,14 +1122,14 @@ def search():
 
     if not candidate_results:
         logger.info("[search] Using generic fallback links for query=%r", query)
-        candidate_results = get_generic_fallback_results(query, filters["max_results"])
+        candidate_results = get_generic_fallback_results(effective_query, filters["max_results"])
 
     scored = []
     for item in candidate_results:
         score = score_result(item, query_terms, learning_weights)
         scored.append({**item, "score": score})
 
-    scored_sorted = sorted(scored, key=lambda x: x["score"], reverse=True)
+    scored_sorted = sort_search_results(scored, filters["sort_by"])
     result_count = len(scored_sorted)
 
     if result_count == 0:
@@ -1087,6 +1171,7 @@ def search():
 
     response = {
         "query": query,
+        "effective_query": effective_query,
         "filters": filters,
         "results": scored_sorted,
         "search_id": search_id,

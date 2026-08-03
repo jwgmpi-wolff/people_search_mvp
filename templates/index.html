@@ -31,36 +31,108 @@
       <section class="panel" id="search">
       <h2>Search</h2>
       <form id="search-form" class="stack">
-        <div class="vertical-stack">
-          <div class="two-col">
-            <div class="left">
-              <label>Query
-                <input name="query" type="text" placeholder="e.g. Microsoft public profile" required />
-              </label>
-              <label>Max results
-                <input name="max_results" type="number" min="5" max="20" value="8" />
-              </label>
-            </div>
-            <div class="right">
-              <label>Entity type
-                <select name="entity">
-                  <option value="public">Public profile</option>
-                  <option value="org">Organization</option>
-                  <option value="news">News & media</option>
-                </select>
-              </label>
-              <label>Source scope
-                <select name="source">
-                  <option value="all_source_scopes" selected>All source scopes</option>
-                  <option value="all">All public sources</option>
-                  <option value="web">Web</option>
-                  <option value="news">News</option>
-                </select>
-              </label>
-              <button type="submit">Run search</button>
-            </div>
-          </div>
+        <label>Query
+          <input name="query" type="text" placeholder="e.g. Avery Stonebridge" required />
+        </label>
+        <div class="refinement-grid">
+          <label>Entity type
+            <select name="entity">
+              <option value="public">Public profile</option>
+              <option value="org">Organization</option>
+              <option value="news">News & media</option>
+            </select>
+          </label>
+          <label>Source scope
+            <select name="source">
+              <option value="all_source_scopes" selected>All public sources</option>
+              <option value="public_records">Local public records</option>
+              <option value="social_media">Social media</option>
+              <option value="web">General web</option>
+              <option value="news">News</option>
+            </select>
+          </label>
+          <label>County public records
+            <select name="public_record_type">
+              <option value="">All record types</option>
+              <option value="county_records">County official records</option>
+              <option value="assessor">Assessor & property</option>
+              <option value="clerk_court">Clerk & court</option>
+              <option value="recorder">Recorder & deeds</option>
+              <option value="sheriff">Sheriff records</option>
+            </select>
+          </label>
+          <label>Social media site
+            <select name="social_media_site">
+              <option value="">All social sites</option>
+              <option value="linkedin">LinkedIn</option>
+              <option value="facebook">Facebook</option>
+              <option value="x">X</option>
+              <option value="instagram">Instagram</option>
+              <option value="tiktok">TikTok</option>
+              <option value="github">GitHub</option>
+              <option value="youtube">YouTube</option>
+              <option value="reddit">Reddit</option>
+            </select>
+          </label>
+          <label>Country
+            <select name="country">
+              <option value="">Any country</option>
+              <option selected>United States</option>
+              <option>Australia</option><option>Brazil</option><option>Canada</option>
+              <option>France</option><option>Germany</option><option>India</option>
+              <option>Ireland</option><option>Italy</option><option>Japan</option>
+              <option>Mexico</option><option>Netherlands</option><option>New Zealand</option>
+              <option>Singapore</option><option>South Africa</option><option>Spain</option>
+              <option>Sweden</option><option>United Kingdom</option>
+            </select>
+          </label>
+          <label>State
+            <select name="state">
+              <option value="">Any state or region</option>
+              <option>Alabama</option><option>Alaska</option><option>Arizona</option><option>Arkansas</option>
+              <option>California</option><option>Colorado</option><option>Connecticut</option><option>Delaware</option>
+              <option>Florida</option><option>Georgia</option><option>Hawaii</option><option>Idaho</option>
+              <option>Illinois</option><option>Indiana</option><option>Iowa</option><option>Kansas</option>
+              <option>Kentucky</option><option>Louisiana</option><option>Maine</option><option>Maryland</option>
+              <option>Massachusetts</option><option>Michigan</option><option>Minnesota</option><option>Mississippi</option>
+              <option>Missouri</option><option>Montana</option><option>Nebraska</option><option>Nevada</option>
+              <option>New Hampshire</option><option>New Jersey</option><option>New Mexico</option><option>New York</option>
+              <option>North Carolina</option><option>North Dakota</option><option>Ohio</option><option>Oklahoma</option>
+              <option>Oregon</option><option>Pennsylvania</option><option>Rhode Island</option><option>South Carolina</option>
+              <option>South Dakota</option><option>Tennessee</option><option>Texas</option><option>Utah</option>
+              <option>Vermont</option><option>Virginia</option><option selected>Washington</option><option>West Virginia</option>
+              <option>Wisconsin</option><option>Wyoming</option><option>District of Columbia</option>
+            </select>
+          </label>
+          <label>County
+            <select name="county">
+              <option value="">Any county</option>
+              <option>Clark County</option><option>King County</option><option>Kitsap County</option>
+              <option>Pierce County</option><option>Skagit County</option><option>Snohomish County</option>
+              <option>Spokane County</option><option>Thurston County</option><option>Whatcom County</option>
+              <option>Yakima County</option>
+            </select>
+          </label>
+          <label>City
+            <select name="city">
+              <option value="">Any city</option>
+              <option>Bellevue</option><option>Everett</option><option>Kent</option><option>Kirkland</option>
+              <option>Olympia</option><option>Redmond</option><option>Renton</option><option>Seattle</option>
+              <option>Spokane</option><option>Tacoma</option><option>Vancouver</option><option>Yakima</option>
+            </select>
+          </label>
+          <label>Sort results
+            <select name="sort_by">
+              <option value="relevance">Relevance</option>
+              <option value="first_name">First name</option>
+              <option value="last_name">Last name</option>
+            </select>
+          </label>
+          <label>Max results
+            <input name="max_results" type="number" min="5" max="25" value="8" />
+          </label>
         </div>
+        <button type="submit">Run search</button>
       </form>
       <div id="status" class="status">Ready.</div>
       <div id="learning" class="pill-box"></div>
