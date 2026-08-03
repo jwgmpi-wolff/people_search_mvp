@@ -9,7 +9,7 @@ from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, abort, jsonify, redirect, render_template, request
 from urllib.parse import urlparse
 import csv
 import io
@@ -83,6 +83,11 @@ def init_db():
         )
         """
     )
+    result_columns = {
+        row[1] for row in cur.execute("PRAGMA table_info(search_results)").fetchall()
+    }
+    if "record_json" not in result_columns:
+        cur.execute("ALTER TABLE search_results ADD COLUMN record_json TEXT")
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS learning_terms (
@@ -1287,8 +1292,10 @@ def search():
     for item in scored_sorted:
         cur.execute(
             """
-            INSERT INTO search_results(search_id, title, url, snippet, source, score)
-            VALUES(?, ?, ?, ?, ?, ?)
+            INSERT INTO search_results(
+                search_id, title, url, snippet, source, score, record_json
+            )
+            VALUES(?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 search_id,
@@ -1297,8 +1304,10 @@ def search():
                 item["snippet"],
                 item["source"],
                 item["score"],
+                json.dumps(item.get("record") or {}),
             ),
         )
+        item["record_path"] = f"/records/{cur.lastrowid}"
 
     conn.commit()
     conn.close()
@@ -1324,6 +1333,45 @@ def search():
         },
     }
     return jsonify(response)
+
+
+@app.route("/records/<int:result_id>")
+def record_detail(result_id: int):
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT id, title, snippet, source, record_json FROM search_results WHERE id = ?",
+        (result_id,),
+    ).fetchone()
+    conn.close()
+    if row is None:
+        abort(404)
+
+    try:
+        record = json.loads(row["record_json"] or "{}")
+    except (TypeError, ValueError):
+        record = {}
+    record.setdefault("name", row["title"] or "Public record")
+    record.setdefault("summary", row["snippet"] or "No record summary was published.")
+    record.setdefault("fields", [])
+    record.setdefault("source_name", row["source"] or "Public source")
+    return render_template("record_detail.html", record=record, result_id=result_id)
+
+
+@app.route("/records/<int:result_id>/source")
+def record_source(result_id: int):
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT url FROM search_results WHERE id = ?",
+        (result_id,),
+    ).fetchone()
+    conn.close()
+    if row is None:
+        abort(404)
+
+    source_url = row["url"] or ""
+    if urlparse(source_url).scheme not in {"http", "https"}:
+        abort(404)
+    return redirect(source_url)
 
 @app.route("/history")
 def history():

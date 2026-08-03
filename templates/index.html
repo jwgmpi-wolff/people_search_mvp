@@ -215,7 +215,17 @@
           source_name: item.source
         };
         const card = document.createElement('article');
-        card.className = 'card';
+        card.className = 'card record-card';
+        card.tabIndex = 0;
+        card.setAttribute('role', 'link');
+        card.setAttribute('aria-label', `View record for ${record.name || 'public record'}`);
+        card.addEventListener('click', () => { window.location.href = item.record_path; });
+        card.addEventListener('keydown', event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            window.location.href = item.record_path;
+          }
+        });
 
         const heading = document.createElement('h3');
         heading.textContent = record.name || 'Public record';
@@ -243,6 +253,11 @@
           });
           card.appendChild(fields);
         }
+
+        const action = document.createElement('span');
+        action.className = 'record-action';
+        action.textContent = 'View full record';
+        card.appendChild(action);
         resultList.appendChild(card);
       });
     }

@@ -92,7 +92,18 @@ class SearchRefinementTests(unittest.TestCase):
             "ABC-123",
         )
         self.assertNotIn("url", response.get_json()["results"][0])
+        record_path = response.get_json()["results"][0]["record_path"]
+        self.assertRegex(record_path, r"^/records/\d+$")
         self.assertEqual(fetch_results.call_args.args[2], 75)
+
+        with MODULE.app.test_client() as client:
+            detail = client.get(record_path)
+            source = client.get(f"{record_path}/source")
+
+        self.assertEqual(detail.status_code, 200)
+        self.assertIn("ABC-123", detail.get_data(as_text=True))
+        self.assertEqual(source.status_code, 302)
+        self.assertEqual(source.headers["Location"], "https://example.test/zoe")
 
     def test_extracts_structured_data_from_record_page(self):
         html = """
@@ -160,6 +171,8 @@ class SearchRefinementTests(unittest.TestCase):
             self.assertIn(f'name="{field_name}"', html)
         self.assertNotIn("Open source", html)
         self.assertIn("record.fields", html)
+        self.assertIn("item.record_path", html)
+        self.assertIn("View full record", html)
         self.assertIn('name="max_results" type="number" min="5" max="100" value="25"', html)
 
 

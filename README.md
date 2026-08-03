@@ -15,6 +15,7 @@ People Search MVP is a Python Flask web application that discovers and ranks pub
 - Result ordering by relevance, first name, or last name
 - Configurable searches returning up to 100 results
 - Record-centric results that extract page summaries and structured fields instead of presenting site links
+- Clickable record cards with persisted in-app detail pages and guarded original-record access
 - Exact-name public-person queries that preserve location refinements without requiring brittle profile phrases
 - First-click reliable search submit handling in the web UI
 - Deterministic fallback records for no-provider-result scenarios
