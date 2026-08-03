@@ -407,7 +407,13 @@ def sort_search_results(results: list, sort_by: str) -> list:
 def _record_value(value) -> str:
     if isinstance(value, dict):
         ordered_keys = ("streetAddress", "addressLocality", "addressRegion", "postalCode", "addressCountry")
-        return ", ".join(str(value[key]).strip() for key in ordered_keys if value.get(key))
+        address = ", ".join(str(value[key]).strip() for key in ordered_keys if value.get(key))
+        if address:
+            return address
+        for key in ("name", "title", "jobTitle", "description"):
+            if value.get(key):
+                return _record_value(value[key])
+        return ""
     if isinstance(value, list):
         return ", ".join(_record_value(item) for item in value if _record_value(item))
     return re.sub(r"\s+", " ", unescape(str(value or ""))).strip()
@@ -449,6 +455,7 @@ def extract_record_from_html(html: str, item: dict) -> dict:
     if structured_record:
         for key, label in (
             ("jobTitle", "Occupation"),
+            ("hasOccupation", "Occupation"),
             ("worksFor", "Organization"),
             ("address", "Address"),
             ("telephone", "Phone"),
@@ -457,6 +464,27 @@ def extract_record_from_html(html: str, item: dict) -> dict:
             ("datePublished", "Published"),
         ):
             add_field(label, structured_record.get(key))
+
+    snippet = _record_value(item.get("snippet"))
+    explicit_patterns = (
+        ("Occupation", r"\b(?:occupation|profession|job title)\b\s*(?:is|:|-)?\s*([^.;|·]{2,100})"),
+        ("Organization", r"\b(?:employer|works (?:at|for)|employed (?:at|by)|experience)\b\s*(?:is|:|-)?\s*([^.;|·]{2,100})"),
+        ("Employment status", r"\b(?:employment|working) status\b\s*(?:is|:|-)?\s*([^.;|·]{2,80})"),
+        ("Source of income", r"\b(?:source of income|income source)\b\s*(?:is|:|-)?\s*([^.;|·]{2,100})"),
+    )
+    for label, pattern in explicit_patterns:
+        match = re.search(pattern, snippet, flags=re.IGNORECASE)
+        if match:
+            add_field(label, match.group(1))
+
+    currency = r"\$[\d,]+(?:\.\d+)?(?:\s*(?:-|–|—|to)\s*\$?[\d,]+(?:\.\d+)?)?(?:\s*(?:thousand|million|billion|[KMB]))?"
+    net_worth_match = re.search(
+        rf"(?:estimated\s+)?net\s+worth\s*(?:is|of|:|-)?\s*({currency})|({currency})\s+(?:estimated\s+)?net\s+worth",
+        snippet,
+        flags=re.IGNORECASE,
+    )
+    if net_worth_match:
+        add_field("Estimated net worth (third-party)", net_worth_match.group(1) or net_worth_match.group(2))
 
     for row in soup.select("table tr"):
         cells = row.find_all(["th", "td"], recursive=False)

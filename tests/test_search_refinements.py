@@ -137,6 +137,53 @@ class SearchRefinementTests(unittest.TestCase):
         )
         self.assertEqual(excerpt["summary"], "Raul's public record")
 
+    def test_extracts_explicit_employment_and_financial_highlights(self):
+        record = MODULE.extract_record_from_html(
+            "",
+            {
+                "title": "Raul Alexis Martin - Public Profile",
+                "url": "https://example.test/raul",
+                "snippet": (
+                    "Experience: Raulito's Cuban Sandwiches · Employment status: Employed. "
+                    "View profile | $200 - $249,999 Net Worth"
+                ),
+            },
+        )
+
+        self.assertIn(
+            {"label": "Organization", "value": "Raulito's Cuban Sandwiches"},
+            record["fields"],
+        )
+        self.assertIn(
+            {"label": "Employment status", "value": "Employed"},
+            record["fields"],
+        )
+        self.assertIn(
+            {"label": "Estimated net worth (third-party)", "value": "$200 - $249,999"},
+            record["fields"],
+        )
+
+        structured = MODULE.extract_record_from_html(
+            '<script type="application/ld+json">'
+            '{"@type":"Person","name":"Jane Doe","worksFor":{"@type":"Organization","name":"Example Co"}}'
+            "</script>",
+            {"title": "Jane Doe", "url": "https://example.test/jane", "snippet": ""},
+        )
+        self.assertIn({"label": "Organization", "value": "Example Co"}, structured["fields"])
+
+        linkedin = MODULE.extract_record_from_html(
+            "",
+            {
+                "title": "Raul Alexis Alvarez | LinkedIn",
+                "url": "https://linkedin.com/in/raul",
+                "snippet": (
+                    "Experience: Raulito's Cuban Sandwiches · Location: Miami. "
+                    "View this profile on LinkedIn, a professional community of 1 billion members."
+                ),
+            },
+        )
+        self.assertNotIn("Occupation", [field["label"] for field in linkedin["fields"]])
+
     def test_results_can_sort_by_first_or_last_name(self):
         results = [
             {"title": "Zoe Adams - Profile", "score": 2},
