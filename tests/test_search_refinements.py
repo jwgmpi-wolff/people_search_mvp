@@ -214,6 +214,51 @@ class SearchRefinementTests(unittest.TestCase):
         )
         self.assertNotIn("Occupation", [field["label"] for field in linkedin["fields"]])
 
+    def test_enriches_named_person_results_with_indexed_public_details(self):
+        results = [
+            {
+                "title": "Philippe K Debrosse - Miami, FL",
+                "url": "https://www.mylife.com/philippe-debrosse/example",
+                "snippet": "Philippe Debrosse lives in Miami, FL.",
+                "source": "duckduckgo",
+            }
+        ]
+        detail_snippet = (
+            "Philippe is now married. Philippe's personal network of family, friends, "
+            "associates & neighbors include Dominique Debrosse and Elisabeth Delatour. "
+            "Philippe's net worth is greater than $250,000 - $499,999; and makes "
+            "between $200 - 249,999 a year."
+        )
+        detail_response = {
+            "results": [{**results[0], "snippet": detail_snippet}],
+            "error": None,
+        }
+
+        with patch.object(MODULE, "fetch_duckduckgo", return_value=detail_response) as fetch:
+            enriched, error = MODULE.enrich_person_search_excerpts("Philippe Debrosse", results, 25)
+
+        self.assertIsNone(error)
+        self.assertIn("net worth", enriched[0]["snippet"])
+        self.assertEqual(fetch.call_args.args[0], '"Philippe Debrosse" net worth income employment')
+
+        record = MODULE.extract_record_from_html("", enriched[0])
+        self.assertIn(
+            {"label": "Relationship status (third-party)", "value": "married"},
+            record["fields"],
+        )
+        self.assertIn(
+            {"label": "Associates (third-party)", "value": "Dominique Debrosse and Elisabeth Delatour"},
+            record["fields"],
+        )
+        self.assertIn(
+            {"label": "Estimated net worth (third-party)", "value": "$250,000 - $499,999"},
+            record["fields"],
+        )
+        self.assertIn(
+            {"label": "Annual income (third-party)", "value": "$200 - 249,999"},
+            record["fields"],
+        )
+
     def test_results_can_sort_by_first_or_last_name(self):
         results = [
             {"title": "Zoe Adams - Profile", "score": 2},

@@ -481,6 +481,9 @@ def extract_record_from_html(html: str, item: dict) -> dict:
         ("Organization", r"\b(?:employer|works (?:at|for)|employed (?:at|by)|experience)\b\s*(?:is|:|-)?\s*([^.;|·]{2,100})"),
         ("Employment status", r"\b(?:employment|working) status\b\s*(?:is|:|-)?\s*([^.;|·]{2,80})"),
         ("Source of income", r"\b(?:source of income|income source)\b\s*(?:is|:|-)?\s*([^.;|·]{2,100})"),
+        ("Relationship status (third-party)", r"\b(?:relationship|marital status)\b\s*(?:is|:|-)?\s*([^.;|·]{2,40})"),
+        ("Relationship status (third-party)", r"\b(?:is|is now)\s+(married|single|divorced|widowed)\b"),
+        ("Associates (third-party)", r"\b(?:associates(?:\s*&\s*neighbors)?|personal network)[^.;:]*?(?:include|:)\s*([^.;]{2,300})"),
     )
     for label, pattern in explicit_patterns:
         match = re.search(pattern, snippet, flags=re.IGNORECASE)
@@ -489,12 +492,20 @@ def extract_record_from_html(html: str, item: dict) -> dict:
 
     currency = r"\$[\d,]+(?:\.\d+)?(?:\s*(?:-|–|—|to)\s*\$?[\d,]+(?:\.\d+)?)?(?:\s*(?:thousand|million|billion|[KMB]))?"
     net_worth_match = re.search(
-        rf"(?:estimated\s+)?net\s+worth\s*(?:is|of|:|-)?\s*({currency})|({currency})\s+(?:estimated\s+)?net\s+worth",
+        rf"(?:estimated\s+)?net\s+worth\s*(?:is|of|:|-)?\s*(?:greater\s+than\s+)?({currency})|({currency})\s+(?:estimated\s+)?net\s+worth",
         snippet,
         flags=re.IGNORECASE,
     )
     if net_worth_match:
         add_field("Estimated net worth (third-party)", net_worth_match.group(1) or net_worth_match.group(2))
+
+    income_match = re.search(
+        rf"\b(?:annual\s+)?income\s*(?:is|of|:|-)?\s*({currency})|\bmakes?\s+(?:between\s+)?({currency})\s+(?:a|per)\s+year\b",
+        snippet,
+        flags=re.IGNORECASE,
+    )
+    if income_match:
+        add_field("Annual income (third-party)", income_match.group(1) or income_match.group(2))
 
     for row in soup.select("table tr"):
         cells = row.find_all(["th", "td"], recursive=False)
@@ -707,6 +718,32 @@ def fetch_results(source: str, query: str, max_results: int):
 
     logger.info("[router] Aggregated unique results=%s errors=%s", len(aggregated), len(errors))
     return aggregated, errors
+
+
+def enrich_person_search_excerpts(person_name: str, results: list, max_results: int):
+    if not person_name or not results:
+        return results, None
+
+    detail_query = f'"{person_name}" net worth income employment'
+    detail_response = fetch_duckduckgo(detail_query, max_results)
+    if detail_response.get("error"):
+        return results, detail_response["error"]
+
+    by_url = {item.get("url"): item for item in results if item.get("url")}
+    for detail in detail_response.get("results", []):
+        url = detail.get("url")
+        if not url:
+            continue
+        existing = by_url.get(url)
+        if existing:
+            if len(detail.get("snippet") or "") > len(existing.get("snippet") or ""):
+                existing["snippet"] = detail["snippet"]
+            continue
+        if len(results) < max_results:
+            results.append(detail)
+            by_url[url] = detail
+
+    return results, None
 
 
 def get_fictional_fallback_results(query: str, max_results: int):
@@ -1302,6 +1339,15 @@ def search():
         effective_query,
         filters["max_results"],
     )
+
+    if person_name and "duckduckgo" in resolve_provider_names(filters["source"]):
+        candidate_results, detail_error = enrich_person_search_excerpts(
+            person_name,
+            candidate_results,
+            filters["max_results"],
+        )
+        if detail_error:
+            fetch_errors.append({"source": "duckduckgo-details", "error": detail_error})
 
     if not candidate_results:
         fallback_results = get_fictional_fallback_results(search_label, filters["max_results"])
