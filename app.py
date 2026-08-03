@@ -585,6 +585,32 @@ def resolve_provider_names(source: str):
 
     return []
 
+
+def build_provider_query_plan(source: str, query: str):
+    normalized = (source or "all").strip().lower()
+    provider_names = resolve_provider_names(normalized)
+    if normalized not in {"all", "all_source_scopes"}:
+        return [(provider_name, query, "selected_scope") for provider_name in provider_names]
+
+    scoped_queries = [
+        ("general_web", query),
+        ("public_records", f'{query} (site:.gov OR site:.us) "public records"'),
+        ("news", f'{query} ("news" OR "media")'),
+    ]
+    scoped_queries.extend(
+        (f"social_{site}", f"{query} site:{domain}")
+        for site, domain in SOCIAL_MEDIA_DOMAINS.items()
+    )
+
+    plan = []
+    for provider_name in provider_names:
+        provider_queries = scoped_queries if provider_name != "wikipedia" else scoped_queries[:1]
+        plan.extend(
+            (provider_name, scoped_query, scope_name)
+            for scope_name, scoped_query in provider_queries
+        )
+    return plan
+
 FICTIONAL_PROFILE_RESULTS = {
     "avery stonebridge": [
         {
@@ -681,6 +707,7 @@ def fetch_results(source: str, query: str, max_results: int):
     seen_urls = set()
 
     provider_names = resolve_provider_names(source)
+    query_plan = build_provider_query_plan(source, query)
 
     if not provider_names:
         warning = {
@@ -691,7 +718,7 @@ def fetch_results(source: str, query: str, max_results: int):
         errors.append(warning)
         return aggregated, errors
 
-    for provider_name in provider_names:
+    for provider_name, provider_query, scope_name in query_plan:
         provider_func = PROVIDERS.get(provider_name)
         if not provider_func:
             warning = {
@@ -702,10 +729,11 @@ def fetch_results(source: str, query: str, max_results: int):
             errors.append(warning)
             continue
 
-        provider_response = provider_func(query, max_results)
+        provider_response = provider_func(provider_query, max_results)
         if provider_response.get("error"):
             errors.append({
                 "source": provider_name,
+                "scope": scope_name,
                 "error": provider_response["error"],
             })
 
@@ -716,7 +744,12 @@ def fetch_results(source: str, query: str, max_results: int):
             aggregated.append(item)
             seen_urls.add(url)
 
-    logger.info("[router] Aggregated unique results=%s errors=%s", len(aggregated), len(errors))
+    logger.info(
+        "[router] Aggregated unique results=%s errors=%s provider_queries=%s",
+        len(aggregated),
+        len(errors),
+        len(query_plan),
+    )
     return aggregated, errors
 
 
@@ -1419,6 +1452,12 @@ def search():
         "fetch_errors": fetch_errors,
         "diagnostics": {
             "provider_count": len(resolve_provider_names(filters["source"])),
+            "provider_query_count": len(build_provider_query_plan(filters["source"], effective_query)),
+            "searched_providers": resolve_provider_names(filters["source"]),
+            "searched_scopes": sorted({
+                scope_name
+                for _, _, scope_name in build_provider_query_plan(filters["source"], effective_query)
+            }),
             "requested_source": filters["source"],
             "result_count": result_count,
         },

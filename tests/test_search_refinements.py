@@ -11,6 +11,42 @@ SPEC.loader.exec_module(MODULE)
 
 
 class SearchRefinementTests(unittest.TestCase):
+    def test_all_sources_searches_every_provider_and_configured_scope(self):
+        calls = []
+
+        def provider(name):
+            def fetch(query, max_results):
+                calls.append((name, query, max_results))
+                return {
+                    "results": [{
+                        "title": f"{name} result",
+                        "url": f"https://{name}.example/{len(calls)}",
+                        "snippet": query,
+                        "source": name,
+                    }],
+                    "error": None,
+                }
+            return fetch
+
+        providers = {
+            "duckduckgo": provider("duckduckgo"),
+            "brave": provider("brave"),
+            "wikipedia": provider("wikipedia"),
+        }
+        with patch.object(MODULE, "PROVIDERS", providers):
+            results, errors = MODULE.fetch_results("all_source_scopes", '"Jane Doe"', 25)
+
+        expected_search_scopes = 3 + len(MODULE.SOCIAL_MEDIA_DOMAINS)
+        self.assertEqual(len(calls), expected_search_scopes * 2 + 1)
+        self.assertEqual(len(results), len(calls))
+        self.assertEqual(errors, [])
+        for provider_name in ("duckduckgo", "brave", "wikipedia"):
+            self.assertTrue(any(call[0] == provider_name for call in calls))
+        for domain in MODULE.SOCIAL_MEDIA_DOMAINS.values():
+            self.assertTrue(any(f"site:{domain}" in call[1] for call in calls))
+        self.assertTrue(any("site:.gov OR site:.us" in call[1] for call in calls))
+        self.assertTrue(any('"news" OR "media"' in call[1] for call in calls))
+
     def test_duckduckgo_uses_lite_post_and_parses_records(self):
         html = """
         <table>
@@ -297,9 +333,13 @@ class SearchRefinementTests(unittest.TestCase):
         self.assertIn("record.fields", html)
         self.assertIn("item.record_path", html)
         self.assertIn("View full record", html)
+        self.assertIn("All public sources (exhaustive)", html)
+        self.assertIn("diagnostics.provider_query_count", html)
         self.assertIn('id="clear-results"', html)
         self.assertIn("sessionStorage.setItem(searchResultsStorageKey", html)
         self.assertIn("restoreSearchResults();", html)
+        self.assertIn("window.addEventListener('pageshow', restoreSearchResults);", html)
+        self.assertIn("if (currentSearchResults) saveSearchResults(currentSearchResults);", html)
         self.assertNotIn("status.textContent = 'Searching…';\n      resultList.innerHTML = '';", html)
         self.assertIn('name="max_results" type="number" min="5" max="100" value="25"', html)
 

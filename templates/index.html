@@ -50,7 +50,7 @@
           </label>
           <label>Source scope
             <select name="source">
-              <option value="all_source_scopes" selected>All public sources</option>
+              <option value="all_source_scopes" selected>All public sources (exhaustive)</option>
               <option value="public_records">Local public records</option>
               <option value="social_media">Social media</option>
               <option value="web">General web</option>
@@ -210,8 +210,10 @@
     const clearResultsBtn = document.getElementById('clear-results');
     const searchResultsStorageKey = 'people_search_results';
     let searchInFlight = false;
+    let currentSearchResults = null;
 
     function saveSearchResults(data) {
+      currentSearchResults = data;
       try {
         sessionStorage.setItem(searchResultsStorageKey, JSON.stringify(data));
       } catch (err) {
@@ -219,14 +221,23 @@
       }
     }
 
+    function searchCompletionText(data) {
+      const diagnostics = data.diagnostics || {};
+      const coverage = diagnostics.provider_query_count
+        ? ` Searched ${diagnostics.provider_query_count} provider queries across ${diagnostics.provider_count} providers.`
+        : '';
+      return `Search complete for “${data.query}” (${data.results.length} results).${coverage}`;
+    }
+
     function restoreSearchResults() {
       try {
         const saved = sessionStorage.getItem(searchResultsStorageKey);
         if (!saved) return;
         const data = JSON.parse(saved);
+        currentSearchResults = data;
         renderResults(data);
         renderLearning(data.learning_terms || {});
-        status.textContent = `Search complete for “${data.query}” (${data.results.length} results).`;
+        status.textContent = searchCompletionText(data);
       } catch (err) {
         sessionStorage.removeItem(searchResultsStorageKey);
         console.warn('Unable to restore saved search results.', err);
@@ -234,6 +245,7 @@
     }
 
     function clearSearchResults() {
+      currentSearchResults = null;
       resultList.innerHTML = '';
       learning.innerHTML = '';
       status.textContent = 'Ready.';
@@ -263,10 +275,14 @@
         card.tabIndex = 0;
         card.setAttribute('role', 'link');
         card.setAttribute('aria-label', `View record for ${record.name || 'public record'}`);
-        card.addEventListener('click', () => { window.location.href = item.record_path; });
+        card.addEventListener('click', () => {
+          if (currentSearchResults) saveSearchResults(currentSearchResults);
+          window.location.href = item.record_path;
+        });
         card.addEventListener('keydown', event => {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
+            if (currentSearchResults) saveSearchResults(currentSearchResults);
             window.location.href = item.record_path;
           }
         });
@@ -363,7 +379,7 @@
         renderResults(data);
         renderLearning(data.learning_terms || {});
         saveSearchResults(data);
-        status.textContent = `Search complete for “${data.query}” (${data.results.length} results).`;
+        status.textContent = searchCompletionText(data);
         loadHistory();
       } catch (err) {
         console.error('search error', err);
@@ -382,6 +398,7 @@
       });
     }
     clearResultsBtn.addEventListener('click', clearSearchResults);
+    window.addEventListener('pageshow', restoreSearchResults);
 
     restoreSearchResults();
     loadHistory();
